@@ -81,21 +81,21 @@
     function renderLoginUI() {
         return `
             <div style="text-align: center; margin-bottom: 20px;">
-                <h1 style="font-size: 2.2rem;">📦 工会宝可梦借还</h1>
-                <p style="color: #3b6c7c;">仅允许管理员添加的会员ID登录</p>
+                <h1 style="font-size: 2.2rem;">📦 公会宝可梦借还</h1>
+                <p style="color: #3b6c7c;">需先向Dshadd申请加入名单后登录</p>
             </div>
             <div class="login-section">
                 <div class="login-card">
-                    <h3>🧑‍💼 工会会员登录</h3>
+                    <h3>🧑‍💼公会成员登录</h3>
                     <input type="text" id="memberIdInput" placeholder="你的英文ID" autocomplete="off">
-                    <button id="memberLoginBtn">🔑 进入</button>
+                    <button id="memberLoginBtn"> 进入</button>
                 </div>
                 <div class="login-card">
                     <h3>🛡️ 管理员登录</h3>
                     <input type="text" id="adminNameInput" placeholder="用户名" value="admin" readonly style="background:#e9f0f5;">
                     <input type="password" id="adminPwdInput" placeholder="密码">
-                    <button id="adminLoginBtn" class="success-btn">⚙️ 进入</button>
-                    <p style="font-size: 0.8rem; color: #567e8a; margin-top: 12px;">工会成员需先在后台添加</p>
+                    <button id="adminLoginBtn" class="success-btn">进入</button>
+                    <p style="font-size: 0.8rem; color: #567e8a; margin-top: 12px;">需先向Dshadd申请加入名单后登录</p>
                 </div>
             </div>
             <div class="footer-note">by Dshadd</div>
@@ -174,7 +174,7 @@
 
         return `
             <div class="top-bar">
-                <div class="badge">🧑 ${currentUser} (会员)</div>
+                <div class="badge">🧑 ${currentUser} (成员)</div>
                 <button id="logoutBtn" class="logout-btn">🚪 登出</button>
             </div>
             <div class="main-panel">
@@ -278,12 +278,12 @@
                     </table>
                 </div>
 
-                <!-- 会员管理模块 -->
+                <!-- 成员管理模块 -->
                 <div style="margin-top: 30px;">
-                    <h2>🧑‍🤝‍🧑 管理会员</h2>
+                    <h2>🧑‍🤝‍🧑 管理成员</h2>
                     <div class="member-manage">
-                        <input type="text" id="newMemberId" placeholder="新会员ID (英文)">
-                        <button id="addMemberBtn" class="success-btn" style="width: auto; padding: 12px 28px;">➕ 增加会员</button>
+                        <input type="text" id="newMemberId" placeholder="新成员ID (英文)">
+                        <button id="addMemberBtn" class="success-btn" style="width: auto; padding: 12px 28px;">➕ 增加成员</button>
                     </div>
                     <div class="member-list">
                         <h3>现有会员</h3>
@@ -296,7 +296,7 @@
                     ${requestItems}
                 </div>
             </div>
-            <div class="footer-note">🔐 所有审批操作将立即更新云端</div>
+            <div class="footer-note">.</div>
         `;
     }
 
@@ -450,7 +450,7 @@
             addMemberBtn.addEventListener('click', async () => {
                 const newMemberInput = document.getElementById('newMemberId');
                 const rawMemberId = newMemberInput.value.trim();
-                if (!rawMemberId) { alert('请输入会员ID'); return; }
+                if (!rawMemberId) { alert('请输入成员ID'); return; }
                 if (!/^[a-zA-Z][a-zA-Z0-9_]{1,20}$/.test(rawMemberId)) {
                     alert('ID需以字母开头，仅包含英文/数字/下划线(2-20位)');
                     return;
@@ -459,7 +459,7 @@
                 
                 const existing = state.members.find(m => m.member_id.toLowerCase() === memberId);
                 if (existing) {
-                    alert('该会员ID已存在');
+                    alert('该成员ID已存在');
                     return;
                 }
                 const { error } = await supabase.from('members').insert([{ member_id: memberId }]);
@@ -475,7 +475,7 @@
         document.querySelectorAll('.delete-member-btn').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 const memberId = e.currentTarget.dataset.memberid;
-                if (!confirm(`确定删除会员 ${memberId} 吗？`)) return;
+                if (!confirm(`确定删除成员 ${memberId} 吗？`)) return;
                 const { error } = await supabase.from('members').delete().eq('member_id', memberId);
                 if (error) {
                     alert('删除失败：' + error.message);
