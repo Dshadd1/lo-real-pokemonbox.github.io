@@ -1,4 +1,5 @@
 // script.js (完整版，支持注册审核，初始密码固定为 pokemmo123456)
+// 修复：审批后恢复管理员会话，登录时用户名转小写
 (function() {
     const SUPABASE_URL = 'https://ktglukdrslxqirefbqvg.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt0Z2x1a2Ryc2x4cWlyZWZicXZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEwMTY0MTEsImV4cCI6MjA4NjU5MjQxMX0.PVMisfYM4BdlMcY-zV20PqP-sPoBwZg2BHGPHMjocFk';
@@ -39,12 +40,12 @@
             .from('profiles')
             .select('username')
             .eq('id', currentUser.id)
-            .single();
+            .maybeSingle();
         if (error) {
             console.error('获取用户名失败:', error);
             return null;
         }
-        currentUsername = data.username;
+        currentUsername = data ? data.username : null;
         return currentUsername;
     }
 
@@ -352,10 +353,11 @@
         
         let email = identifier;
         if (!identifier.includes('@')) {
+            // 用户名登录：转为小写查询
             const { data, error } = await supabase
                 .from('profiles')
                 .select('email')
-                .eq('username', identifier)
+                .eq('username', identifier.toLowerCase()) // 转为小写
                 .maybeSingle();
             if (error || !data) {
                 alert('用户名不存在');
@@ -370,42 +372,106 @@
 
     // 创建注册申请
     async function createRegistrationRequest(username, email) {
-        if (!username || !email) { alert('请填写用户名和邮箱'); return; }
-        // 检查用户名/邮箱是否已存在
-        const { data: existingProfile, error: profileError } = await supabase
-            .from('profiles')
-            .select('username')
-            .eq('username', username)
-            .maybeSingle();
-        if (profileError) { alert('验证失败：' + profileError.message); return; }
-        if (existingProfile) { alert('用户名已存在'); return; }
+        if (!username || !email) { 
+            alert('请填写用户名和邮箱'); 
+            return; 
+        }
 
-        const { data: existingEmail, error: emailError } = await supabase
-            .from('profiles')
-            .select('email')
-            .eq('email', email)
-            .maybeSingle();
-        if (emailError) { alert('验证失败：' + emailError.message); return; }
-        if (existingEmail) { alert('邮箱已被注册'); return; }
+        // 验证格式
+        if (!/^[a-zA-Z][a-zA-Z0-9_]{1,20}$/.test(username)) {
+            alert('用户名需以字母开头，仅包含英文/数字/下划线(2-20位)');
+            return;
+        }
+        
+        if (!email.includes('@')) {
+            alert('请输入有效的邮箱地址');
+            return;
+        }
 
-        // 检查是否有待处理的申请
-        const { data: pendingReq } = await supabase
-            .from('registration_requests')
-            .select('id')
-            .eq('username', username)
-            .eq('status', 'pending')
-            .maybeSingle();
-        if (pendingReq) { alert('该用户名已有待审核的申请'); return; }
+        const lowerUsername = username.toLowerCase();
+        const lowerEmail = email.toLowerCase();
 
-        const { error } = await supabase
-            .from('registration_requests')
-            .insert([{ username, email, status: 'pending' }]);
-        if (error) {
-            alert('提交失败：' + error.message);
-        } else {
+        try {
+            // 1. 检查用户名是否已在 profiles 表中存在（已注册用户）
+            const { data: existingProfile, error: profileError } = await supabase
+                .from('profiles')
+                .select('username')
+                .eq('username', lowerUsername)
+                .maybeSingle();
+                
+            if (profileError) throw profileError;
+            if (existingProfile) {
+                alert('用户名已被注册，请换一个');
+                return;
+            }
+
+            // 2. 检查邮箱是否已在 profiles 表中存在
+            const { data: existingEmail, error: emailError } = await supabase
+                .from('profiles')
+                .select('email')
+                .eq('email', lowerEmail)
+                .maybeSingle();
+                
+            if (emailError) throw emailError;
+            if (existingEmail) {
+                alert('邮箱已被注册，请换一个');
+                return;
+            }
+
+            // 3. 检查用户名是否有待处理的申请
+            const { data: pendingUsername, error: pendingUserError } = await supabase
+                .from('registration_requests')
+                .select('id')
+                .eq('username', lowerUsername)
+                .eq('status', 'pending')
+                .maybeSingle();
+                
+            if (pendingUserError) throw pendingUserError;
+            if (pendingUsername) {
+                alert('该用户名已有待审核的申请，请耐心等待或换一个用户名');
+                return;
+            }
+
+            // 4. 检查邮箱是否有待处理的申请
+            const { data: pendingEmail, error: pendingEmailError } = await supabase
+                .from('registration_requests')
+                .select('id')
+                .eq('email', lowerEmail)
+                .eq('status', 'pending')
+                .maybeSingle();
+                
+            if (pendingEmailError) throw pendingEmailError;
+            if (pendingEmail) {
+                alert('该邮箱已有待审核的申请，请耐心等待');
+                return;
+            }
+
+            // 5. 提交新的注册申请
+            const { error } = await supabase
+                .from('registration_requests')
+                .insert([{ 
+                    username: lowerUsername, 
+                    email: lowerEmail, 
+                    status: 'pending',
+                    created_at: new Date().toISOString()
+                }]);
+                
+            if (error) {
+                if (error.code === '23505') { // PostgreSQL 唯一约束冲突
+                    alert('该用户名或邮箱暂时无法申请，请稍后再试');
+                } else {
+                    alert('提交失败：' + error.message);
+                }
+                return;
+            }
+            
             alert('注册申请已提交，请等待管理员审核');
             document.getElementById('regUsername').value = '';
             document.getElementById('regEmail').value = '';
+            
+        } catch (err) {
+            console.error('提交申请时出错:', err);
+            alert('提交失败，请稍后重试');
         }
     }
 
@@ -488,7 +554,7 @@
             });
         });
 
-        // 审批注册请求（关键修改：固定初始密码）
+        // 审批注册请求
         document.querySelectorAll('.approve-reg-btn').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 const reqId = e.currentTarget.dataset.reqid;
@@ -529,10 +595,31 @@
         }
     }
 
-    // ---------- 注册审批函数（使用固定密码）----------
+    // ---------- 注册审批函数（使用固定密码 + 删除请求 + 恢复管理员会话）----------
     async function approveRegistration(reqId, username, email) {
         // 固定初始密码
         const password = 'pokemmo123456';
+
+        // 保存当前会话（管理员）
+        const { data: { session: originalSession } } = await supabase.auth.getSession();
+
+        // 再次检查用户名是否已被占用（防止并发操作）
+        const { data: existingProfile } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('username', username.toLowerCase())
+            .maybeSingle();
+            
+        if (existingProfile) {
+            alert('用户名已被占用，审批失败');
+            // 删除这个无效的注册请求
+            await supabase
+                .from('registration_requests')
+                .delete()
+                .eq('id', reqId);
+            await renderApp();
+            return;
+        }
 
         // 调用 Supabase Auth 创建用户
         const { data, error } = await supabase.auth.signUp({
@@ -551,28 +638,50 @@
         // 创建 profiles 记录
         const { error: profileError } = await supabase
             .from('profiles')
-            .insert([{ id: data.user.id, username, email }]);
+            .insert([{ 
+                id: data.user.id, 
+                username: username.toLowerCase(), 
+                email: email.toLowerCase() 
+            }]);
 
         if (profileError) {
             alert('创建用户资料失败：' + profileError.message);
             return;
         }
 
-        // 更新注册请求状态为 approved
-        await supabase
+        // 删除注册请求
+        const { error: deleteError } = await supabase
             .from('registration_requests')
-            .update({ status: 'approved' })
+            .delete()
             .eq('id', reqId);
 
+        if (deleteError) {
+            console.error('删除注册请求失败:', deleteError);
+        }
+
+        // 恢复管理员会话（防止被新用户登录覆盖）
+        if (originalSession) {
+            await supabase.auth.setSession({
+                access_token: originalSession.access_token,
+                refresh_token: originalSession.refresh_token
+            });
+        }
+
         alert(`用户 ${username} 创建成功！初始密码为：${password}\n请务必告知用户此密码，并提醒其登录后修改密码。`);
-        await renderApp();
+        // 无需手动调用 renderApp，因为 setSession 会触发 onAuthStateChange 重新渲染
     }
 
     async function rejectRegistration(reqId) {
-        await supabase
+        const { error } = await supabase
             .from('registration_requests')
-            .update({ status: 'rejected' })
+            .delete()
             .eq('id', reqId);
+            
+        if (error) {
+            alert('拒绝失败：' + error.message);
+            return;
+        }
+        
         await renderApp();
     }
 
