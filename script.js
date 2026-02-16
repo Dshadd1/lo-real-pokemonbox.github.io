@@ -98,14 +98,14 @@
     function renderLoginUI() {
         return `
             <div style="text-align: center; margin-bottom: 20px;">
-                <h1 style="font-size: 2.2rem;">📦 工会宝可梦借还</h1>
+                <h1 style="font-size: 2.2rem;">📦 公会宝可梦借还</h1>
                 <p style="color: #3b6c7c;">请使用邮箱注册或登录</p>
             </div>
             <div class="login-section">
                 <div class="login-card">
                     <h3>🔐 登录 / 注册</h3>
-                    <input type="email" id="emailInput" placeholder="邮箱" autocomplete="off">
-                    <input type="password" id="passwordInput" placeholder="密码">
+                    <input type="email" id="emailInput" placeholder="邮箱(qq号@qq.com)" autocomplete="off">
+                    <input type="password" id="passwordInput" placeholder="密码(建议设置为游戏id)">
                     <button id="signInBtn" style="margin-bottom: 8px;">🔑 登录</button>
                     <button id="signUpBtn" class="btn-outline">📝 注册新账号</button>
                     <p style="font-size:0.8rem; margin-top:12px;">注册后联系管理员设置角色</p>
@@ -115,7 +115,7 @@
         `;
     }
 
-    // ---------- 会员主面板（与原逻辑类似，但使用 currentUser.id 作为标识）----------
+    // ---------- 成员主面板（与原逻辑类似，但使用 currentUser.id 作为标识）----------
     function renderMemberPanel() {
         const items = state.items;
         const borrows = state.borrowRecords.filter(b => !b.returned);
@@ -179,7 +179,7 @@
 
         return `
             <div class="top-bar">
-                <div class="badge">🧑 ${currentUser.email} (会员)</div>
+                <div class="badge">🧑 ${currentUser.email} (成员)</div>
                 <button id="logoutBtn" class="logout-btn">🚪 登出</button>
             </div>
             <div class="main-panel">
@@ -196,12 +196,12 @@
         `;
     }
 
-    // ---------- 管理员面板（与原逻辑类似，增加会员管理界面简化）----------
+    // ---------- 管理员面板（与原逻辑类似，增加成员管理界面简化）----------
     function renderAdminPanel() {
         const items = state.items;
         const borrows = state.borrowRecords.filter(b => !b.returned);
         const pendingRequests = state.requests.filter(r => r.status === 'pending');
-        // 注意：不再有 members 表，管理员无法直接添加会员，但可以通过 Auth 页面添加
+        // 注意：不再有 members 表，管理员无法直接添加成员，但可以通过 Auth 页面添加
 
         // 物品表格（略，与之前相同）
         let itemRows = '';
@@ -267,11 +267,11 @@
                     </table>
                 </div>
 
-                <!-- 会员管理提示：会员通过 Auth 管理 -->
+                <!-- 成员管理提示：成员通过 Auth 管理 -->
                 <div style="margin-top: 30px; padding: 20px; background: #f0f7fa; border-radius: 20px;">
-                    <h3>🧑‍🤝‍🧑 会员管理</h3>
+                    <h3>🧑‍🤝‍🧑 成员管理</h3>
                     <p>请在 Supabase 控制台的 <strong>Authentication → Users</strong> 中添加或删除用户。</p>
-                    <p>新注册的会员默认角色为普通用户，如需设为管理员，请在控制台编辑其 User Metadata，添加 <code>{"role": "admin"}</code>。</p>
+                    <p>新注册的成员默认角色为普通用户，如需设为管理员，请在控制台编辑其 User Metadata，添加 <code>{"role": "admin"}</code>。</p>
                 </div>
 
                 <div class="request-list">
