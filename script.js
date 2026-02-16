@@ -600,7 +600,7 @@
         // 搜索框
         const memberSearch = document.getElementById('member-search');
         if (memberSearch) {
-            memberSearch.value = memberSearchTerm;
+            //memberSearch.value = memberSearchTerm;
             memberSearch.addEventListener('input', (e) => {
                 memberSearchTerm = e.target.value;
                 filterTable('member-items-table', memberSearchTerm);
