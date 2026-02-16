@@ -349,44 +349,25 @@
 
     // 处理登录（支持用户名或邮箱）
     async function handleSignIn(identifier, password) {
-        if (!identifier || !password) { alert('请输入用户名/邮箱和密码'); return; }
-        
-        let email = identifier;
-        if (!identifier.includes('@')) {
-            try {
-                const { data, error } = await supabase
-                    .from('profiles')
-                    .select('email')
-                    .eq('username', identifier.toLowerCase())
-                    .maybeSingle();
-                if (error) {
-                    console.error('查询用户名时出错:', error);
-                    alert('系统错误，请稍后重试');
-                    return;
-                }
-                if (!data) {
-                    alert('用户名不存在');
-                    return;
-                }
-                email = data.email;
-            } catch (err) {
-                console.error('登录过程出错:', err);
-                alert('系统错误，请稍后重试');
-                return;
-            }
-        }
+    if (!identifier || !password) { alert('请输入用户名/邮箱和密码'); return; }
 
-        try {
-            const { error } = await supabase.auth.signInWithPassword({ email, password });
-            if (error) {
-                console.error('登录失败:', error);
-                alert('登录失败：' + error.message);
-            }
-        } catch (err) {
-            console.error('登录过程出错:', err);
-            alert('系统错误，请稍后重试');
+    let email = identifier;
+    if (!identifier.includes('@')) {
+        // 使用 RPC 获取邮箱
+        const { data, error } = await supabase.rpc('get_email_by_username', {
+            input_username: identifier.toLowerCase()
+        });
+        if (error || !data) {
+            console.error('获取邮箱失败:', error);
+            alert('用户名不存在或查询失败，请使用邮箱登录');
+            return;
         }
+        email = data; // data 即为邮箱字符串
     }
+
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) alert('登录失败：' + error.message);
+}
 
     // 创建注册申请（统一转为小写）
     async function createRegistrationRequest(username, email) {
@@ -407,24 +388,19 @@
         
         try {
             // 检查用户名是否已在 profiles 表存在
-            const { data: existingProfile, error: profileError } = await supabase
-                .from('profiles')
-                .select('username')
-                .eq('username', username)
-                .maybeSingle();
-            if (profileError) throw profileError;
-            if (existingProfile) {
+            const { data: usernameExists, error: usernameCheckError } = await supabase
+                .rpc('check_username_exists', { input_username: username });
+            if (usernameCheckError) throw usernameCheckError;
+            if (usernameExists) {
                 alert('用户名已被注册，请换一个');
                 return;
             }
 
-            const { data: existingEmail, error: emailError } = await supabase
-                .from('profiles')
-                .select('email')
-                .eq('email', email)
-                .maybeSingle();
-            if (emailError) throw emailError;
-            if (existingEmail) {
+            // 检查邮箱是否存在
+            const { data: emailExists, error: emailCheckError } = await supabase
+                .rpc('check_email_exists', { input_email: email });
+            if (emailCheckError) throw emailCheckError;
+            if (emailExists) {
                 alert('邮箱已被注册，请换一个');
                 return;
             }
