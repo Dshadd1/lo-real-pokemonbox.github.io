@@ -1,4 +1,4 @@
-// script.js (完整版，支持注册审核)
+// script.js (完整版，支持注册审核，初始密码固定为 pokemmo123456)
 (function() {
     const SUPABASE_URL = 'https://ktglukdrslxqirefbqvg.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt0Z2x1a2Ryc2x4cWlyZWZicXZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEwMTY0MTEsImV4cCI6MjA4NjU5MjQxMX0.PVMisfYM4BdlMcY-zV20PqP-sPoBwZg2BHGPHMjocFk';
@@ -10,7 +10,7 @@
         items: [],
         borrowRecords: [],
         requests: [],
-        registrationRequests: [] // 新增：注册请求
+        registrationRequests: []
     };
 
     let currentUser = null;
@@ -29,11 +29,6 @@
 
     function generateId(prefix = '') {
         return prefix + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
-    }
-
-    // 生成随机密码（8位字母数字）
-    function generateRandomPassword() {
-        return Math.random().toString(36).slice(-8);
     }
 
     // 获取当前用户名
@@ -117,7 +112,7 @@
         attachMainEvents();
     }
 
-    // ---------- 登录界面（注册只提交申请）----------
+    // ---------- 登录界面 ----------
     function renderLoginUI() {
         return `
             <div style="text-align: center; margin-bottom: 20px;">
@@ -143,7 +138,7 @@
         `;
     }
 
-    // ---------- 成员主面板（略，与上一版相同）----------
+    // ---------- 成员主面板 ----------
     function renderMemberPanel() {
         const items = state.items;
         const borrows = state.borrowRecords.filter(b => !b.returned);
@@ -224,12 +219,12 @@
         `;
     }
 
-    // ---------- 管理员面板（增加注册请求管理）----------
+    // ---------- 管理员面板 ----------
     function renderAdminPanel() {
         const items = state.items;
         const borrows = state.borrowRecords.filter(b => !b.returned);
         const pendingRequests = state.requests.filter(r => r.status === 'pending');
-        const pendingRegs = state.registrationRequests; // 已经只拉取 pending 的
+        const pendingRegs = state.registrationRequests;
 
         // 物品表格
         let itemRows = '';
@@ -339,14 +334,12 @@
 
     // ---------- 登录/注册请求事件绑定 ----------
     function attachLoginEvents() {
-        // 登录
         document.getElementById('signInBtn')?.addEventListener('click', async () => {
             const identifier = document.getElementById('loginIdentifier').value;
             const password = document.getElementById('passwordInput').value;
             await handleSignIn(identifier, password);
         });
 
-        // 提交注册申请
         document.getElementById('submitRegRequestBtn')?.addEventListener('click', async () => {
             const username = document.getElementById('regUsername').value.trim();
             const email = document.getElementById('regEmail').value.trim();
@@ -378,7 +371,7 @@
     // 创建注册申请
     async function createRegistrationRequest(username, email) {
         if (!username || !email) { alert('请填写用户名和邮箱'); return; }
-        // 检查用户名/邮箱是否已存在（profiles 或 registration_requests 中）
+        // 检查用户名/邮箱是否已存在
         const { data: existingProfile, error: profileError } = await supabase
             .from('profiles')
             .select('username')
@@ -416,14 +409,13 @@
         }
     }
 
-    // ---------- 主界面事件绑定（增加注册审批）----------
+    // ---------- 主界面事件绑定 ----------
     function attachMainEvents() {
-        // 登出
         document.getElementById('logoutBtn')?.addEventListener('click', async () => {
             await supabase.auth.signOut();
         });
 
-        // 借用请求（略，与之前相同）
+        // 借用请求
         document.querySelectorAll('.borrow-request-btn').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 const itemId = e.currentTarget.dataset.itemid;
@@ -496,13 +488,13 @@
             });
         });
 
-        // 审批注册请求
+        // 审批注册请求（关键修改：固定初始密码）
         document.querySelectorAll('.approve-reg-btn').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 const reqId = e.currentTarget.dataset.reqid;
                 const username = e.currentTarget.dataset.username;
                 const email = e.currentTarget.dataset.email;
-                if (confirm(`通过用户 ${username} 的注册申请？系统将为其创建账号并生成随机密码，请务必私下告知密码。`)) {
+                if (confirm(`通过用户 ${username} 的注册申请？系统将为其创建账号，初始密码统一为 pokemmo123456。请务必私下告知用户。`)) {
                     await approveRegistration(reqId, username, email);
                 }
             });
@@ -537,10 +529,10 @@
         }
     }
 
-    // ---------- 注册审批函数 ----------
+    // ---------- 注册审批函数（使用固定密码）----------
     async function approveRegistration(reqId, username, email) {
-        // 生成随机密码
-        const password = generateRandomPassword();
+        // 固定初始密码
+        const password = 'pokemmo123456';
 
         // 调用 Supabase Auth 创建用户
         const { data, error } = await supabase.auth.signUp({
@@ -563,11 +555,10 @@
 
         if (profileError) {
             alert('创建用户资料失败：' + profileError.message);
-            // 尝试删除已创建的 Auth 用户（可选，但复杂）
             return;
         }
 
-        // 更新注册请求状态为 approved（或直接删除）
+        // 更新注册请求状态为 approved
         await supabase
             .from('registration_requests')
             .update({ status: 'approved' })
@@ -585,7 +576,7 @@
         await renderApp();
     }
 
-    // ---------- 原有的云端操作函数（保持不变，但需注意新增了 username 字段）----------
+    // ---------- 其他云端操作函数（与之前相同）----------
     async function addItem(name, info) {
         const newItem = { id: generateId('itm-'), name, info };
         const { error } = await supabase.from('items').insert([newItem]);
@@ -615,7 +606,6 @@
     }
 
     async function createBorrowRequest(itemId) {
-        // ... 与上一版相同
         const item = state.items.find(i => i.id === itemId);
         if (!item) return;
         const activeBorrow = state.borrowRecords.find(b => b.item_id === itemId && !b.returned);
