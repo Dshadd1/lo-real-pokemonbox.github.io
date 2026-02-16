@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工会仓库在线借还系统 · 会员管理版</title>
+    <title>公会仓库在线借还系统 [lo][real]</title>
     <style>
         /* 样式保持不变 */
         * { box-sizing: border-box; font-family: system-ui, 'Segoe UI', Roboto, sans-serif; }
@@ -30,7 +30,7 @@
         td { padding: 14px 12px; border-bottom: 1px solid #dfe8ed; vertical-align: middle; }
         .status-badge { background: #e7f0f4; padding: 6px 14px; border-radius: 40px; font-size: 0.85rem; font-weight: 500; color: #1c5a6e; display: inline-block; }
         .status-borrowed { background: #feeed9; color: #9d6b1a; }
-        .action-group { display: flex; gap: 8px; flex-wrap: wrap; }
+        .action-group { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
         .request-list { background: #f8fbfd; border-radius: 20px; padding: 20px; margin-top: 30px; }
         .request-item { background: white; padding: 14px 18px; border-radius: 16px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; border-left: 6px solid #3e9bba; }
         .empty-msg { color: #6c868e; font-style: italic; padding: 16px; text-align: center; }
@@ -45,6 +45,9 @@
         .search-box { margin-bottom: 15px; width: 100%; }
         /* 表格滚动容器 */
         .table-container { max-height: 400px; overflow-y: auto; border-radius: 20px; border: 1px solid #dfe8ed; }
+        /* 撤回按钮样式 */
+        .withdraw-btn { background: #f0ad4e; color: white; border: none; border-radius: 20px; padding: 4px 12px; font-size: 0.8rem; cursor: pointer; margin-left: 8px; }
+        .withdraw-btn:hover { background: #ec971f; }
     </style>
     <!-- 引入 Supabase 客户端 -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -138,28 +141,28 @@
         function renderLoginUI() {
             return `
                 <div style="text-align: center; margin-bottom: 20px;">
-                    <h1 style="font-size: 2.2rem;">📦 工会宝可梦借还</h1>
-                    <p style="color: #3b6c7c;">仅允许管理员添加的会员ID登录</p>
+                    <h1 style="font-size: 2.2rem;">📦 公会宝可梦借还</h1>
+                    <p style="color: #3b6c7c;">仅允许管理员添加的成员ID登录</p>
                 </div>
                 <div class="login-section">
                     <div class="login-card">
-                        <h3>🧑‍💼 工会会员登录</h3>
+                        <h3>🧑‍💼 公会成员登录</h3>
                         <input type="text" id="memberIdInput" placeholder="你的英文ID" autocomplete="off">
-                        <button id="memberLoginBtn">🔑 进入</button>
+                        <button id="memberLoginBtn"> 进入</button>
                     </div>
                     <div class="login-card">
                         <h3>🛡️ 管理员登录</h3>
                         <input type="text" id="adminNameInput" placeholder="用户名" value="admin" readonly style="background:#e9f0f5;">
                         <input type="password" id="adminPwdInput" placeholder="密码">
-                        <button id="adminLoginBtn" class="success-btn">⚙️ 进入</button>
-                        <p style="font-size: 0.8rem; color: #567e8a; margin-top: 12px;">工会成员需先在后台添加</p>
+                        <button id="adminLoginBtn" class="success-btn"> 进入</button>
+                        <p style="font-size: 0.8rem; color: #567e8a; margin-top: 12px;">公会成员需先在后台添加</p>
                     </div>
                 </div>
                 <div class="footer-note">by Dshadd</div>
             `;
         }
 
-        // 会员主面板（添加搜索框和滚动容器）
+        // 会员主面板（添加撤回功能）
         function renderMemberPanel() {
             const items = state.items;
             const borrows = state.borrowRecords.filter(b => !b.returned);
@@ -180,22 +183,38 @@
                 const activeBorrow = borrows.find(b => b.item_id === item.id);
                 const borrowedByMe = activeBorrow && activeBorrow.borrower_id === currentUser;
                 const hasPendingBorrowRequest = requests.some(r => r.item_id === item.id && r.type === 'borrow');
-                const myPendingBorrow = requests.some(r => r.item_id === item.id && r.requester === currentUser && r.type === 'borrow');
-                const myPendingReturn = requests.some(r => r.item_id === item.id && r.requester === currentUser && r.type === 'return');
+                
+                // 查找当前用户对该物品的待处理请求
+                const myPendingBorrowReq = requests.find(r => r.item_id === item.id && r.requester === currentUser && r.type === 'borrow');
+                const myPendingReturnReq = requests.find(r => r.item_id === item.id && r.requester === currentUser && r.type === 'return');
+                
+                const myPendingBorrow = !!myPendingBorrowReq;
+                const myPendingReturn = !!myPendingReturnReq;
 
                 let actionBtn = '';
                 if (!isBorrowed && !hasPendingBorrowRequest) {
+                    // 未借且无人申请 → 可借用请求
                     actionBtn = `<button class="btn-outline borrow-request-btn" data-itemid="${item.id}" style="width: auto;">📨 借用请求</button>`;
                 } else if (!isBorrowed && hasPendingBorrowRequest) {
                     if (myPendingBorrow) {
-                        actionBtn = `<span style="color: #8a9fa5;">⏳ 请求已提交</span>`;
+                        // 自己已提交借用请求 → 显示“请求已提交”+撤回按钮
+                        actionBtn = `
+                            <span style="color: #8a9fa5;">⏳ 请求已提交</span>
+                            <button class="withdraw-btn withdraw-request-btn" data-requestid="${myPendingBorrowReq.id}">✖ 撤回</button>
+                        `;
                     } else {
+                        // 他人已申请 → 只显示锁定
                         actionBtn = `<span style="color: #b2876f;">🔒 他人已申请</span>`;
                     }
                 } else if (isBorrowed && borrowedByMe) {
                     if (myPendingReturn) {
-                        actionBtn = `<span style="color: #8a9fa5;">⏳ 归还请求中</span>`;
+                        // 自己已提交归还请求 → 显示“归还请求中”+撤回按钮
+                        actionBtn = `
+                            <span style="color: #8a9fa5;">⏳ 归还请求中</span>
+                            <button class="withdraw-btn withdraw-request-btn" data-requestid="${myPendingReturnReq.id}">✖ 撤回</button>
+                        `;
                     } else {
+                        // 未提交归还请求 → 可提交归还
                         actionBtn = `<button class="btn-outline return-request-btn" data-itemid="${item.id}" style="width: auto; background: #f8e3cd;">↩️ 归还请求</button>`;
                     }
                 } else if (isBorrowed && !borrowedByMe) {
@@ -215,7 +234,7 @@
 
             return `
                 <div class="top-bar">
-                    <div class="badge">🧑 ${currentUser} (会员)</div>
+                    <div class="badge">🧑 ${currentUser} (成员)</div>
                     <button id="logoutBtn" class="logout-btn">🚪 登出</button>
                 </div>
                 <div class="main-panel">
@@ -230,7 +249,7 @@
                         </table>
                     </div>
                 </div>
-                <div class="footer-note">✅ 数据云端存储，实时同步</div>
+                <div class="footer-note">by Dshadd</div>
             `;
         }
 
@@ -321,14 +340,14 @@
 
                     <!-- 会员管理模块 -->
                     <div style="margin-top: 30px;">
-                        <h2>🧑‍🤝‍🧑 管理会员</h2>
+                        <h2>🧑‍🤝‍🧑 管理成员</h2>
                         <div class="member-manage">
-                            <input type="text" id="newMemberId" placeholder="新会员ID (英文)">
-                            <button id="addMemberBtn" class="success-btn" style="width: auto; padding: 12px 28px;">➕ 增加会员</button>
+                            <input type="text" id="newMemberId" placeholder="新成员ID (英文)">
+                            <button id="addMemberBtn" class="success-btn" style="width: auto; padding: 12px 28px;">➕ 增加成员</button>
                         </div>
                         <div class="member-list">
-                            <h3>现有会员</h3>
-                            ${memberItems || '<div class="empty-msg">暂无会员，请添加</div>'}
+                            <h3>现有成员</h3>
+                            ${memberItems || '<div class="empty-msg">暂无成员，请添加</div>'}
                         </div>
                     </div>
 
@@ -416,7 +435,7 @@
             });
         }
 
-        // ---------- 主界面事件绑定（增加搜索框事件）----------
+        // ---------- 主界面事件绑定（增加撤回事件）----------
         function attachMainEvents() {
             // 登出
             document.getElementById('logoutBtn')?.addEventListener('click', () => {
@@ -436,6 +455,16 @@
                 btn.addEventListener('click', async (e) => {
                     const itemId = e.currentTarget.dataset.itemid;
                     await createReturnRequest(itemId);
+                });
+            });
+
+            // ----- 撤回请求按钮 -----
+            document.querySelectorAll('.withdraw-request-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const requestId = e.currentTarget.dataset.requestid;
+                    if (confirm('确定撤回该请求吗？')) {
+                        await withdrawRequest(requestId);
+                    }
                 });
             });
 
@@ -482,7 +511,7 @@
                 addMemberBtn.addEventListener('click', async () => {
                     const newMemberInput = document.getElementById('newMemberId');
                     const rawMemberId = newMemberInput.value.trim();
-                    if (!rawMemberId) { alert('请输入会员ID'); return; }
+                    if (!rawMemberId) { alert('请输入成员ID'); return; }
                     if (!/^[a-zA-Z][a-zA-Z0-9_]{1,20}$/.test(rawMemberId)) {
                         alert('ID需以字母开头，仅包含英文/数字/下划线(2-20位)');
                         return;
@@ -491,7 +520,7 @@
                     
                     const existing = state.members.find(m => m.member_id.toLowerCase() === memberId);
                     if (existing) {
-                        alert('该会员ID已存在');
+                        alert('该成员ID已存在');
                         return;
                     }
                     const { error } = await supabase.from('members').insert([{ member_id: memberId }]);
@@ -507,7 +536,7 @@
             document.querySelectorAll('.delete-member-btn').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
                     const memberId = e.currentTarget.dataset.memberid;
-                    if (!confirm(`确定删除会员 ${memberId} 吗？`)) return;
+                    if (!confirm(`确定删除成员 ${memberId} 吗？`)) return;
                     const { error } = await supabase.from('members').delete().eq('member_id', memberId);
                     if (error) {
                         alert('删除失败：' + error.message);
@@ -538,7 +567,7 @@
             });
 
             // ----- 搜索框事件绑定 -----
-            // 会员搜索
+            // 成员搜索
             const memberSearch = document.getElementById('member-search');
             if (memberSearch) {
                 memberSearch.value = memberSearchTerm; // 确保显示最新词
@@ -641,6 +670,16 @@
             };
             const { error } = await supabase.from('requests').insert([newReq]);
             if (error) { alert('提交失败：' + error.message); return; }
+            await renderApp();
+        }
+
+        // 新增：撤回请求函数
+        async function withdrawRequest(requestId) {
+            const { error } = await supabase.from('requests').delete().eq('id', requestId);
+            if (error) {
+                alert('撤回失败：' + error.message);
+                return;
+            }
             await renderApp();
         }
 
