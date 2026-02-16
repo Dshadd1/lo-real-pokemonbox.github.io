@@ -95,7 +95,7 @@
                     <input type="text" id="adminNameInput" placeholder="用户名" value="admin" readonly style="background:#e9f0f5;">
                     <input type="password" id="adminPwdInput" placeholder="密码">
                     <button id="adminLoginBtn" class="success-btn">进入</button>
-                    <p style="font-size: 0.8rem; color: #567e8a; margin-top: 12px;">需先向Dshadd申请加入名单后登录</p>
+                    <p style="font-size: 0.8rem; color: #567e8a; margin-top: 12px;">公会成员请从左边登录</p>
                 </div>
             </div>
             <div class="footer-note">by Dshadd</div>
