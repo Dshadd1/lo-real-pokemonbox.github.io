@@ -260,7 +260,7 @@
                     : `<button class="success-btn approve-return-btn" data-requestid="${req.id}" style="width: auto;">🔄 确认归还</button>`;
                 requestItems += `
                     <div class="request-item">
-                        <div><strong>${itemName}</strong><br><span style="color: #3a6c7a;">申请人: ${req.username || req.user_email || '未知'}  ·  ${reqTypeText}</span></div>
+                        <div><strong>${itemName}</strong><br><span style="color: #3a6c7a;">申请人: ${req.username || '未知'}  ·  ${reqTypeText}</span></div>
                         <div class="action-group">
                             ${approveBtn}
                             <button class="danger-btn reject-request-btn" data-requestid="${req.id}" style="width: auto; background: #9f7e6b;">❌ 拒绝</button>
@@ -721,7 +721,6 @@
             id: generateId('req-'),
             item_id: itemId,
             user_id: currentUser.id,
-            user_email: currentUser.email,
             username: currentUsername,
             type: 'borrow',
             status: 'pending',
@@ -742,7 +741,6 @@
             id: generateId('req-'),
             item_id: itemId,
             user_id: currentUser.id,
-            user_email: currentUser.email,
             username: currentUsername,
             type: 'return',
             status: 'pending',
@@ -775,7 +773,6 @@
             id: generateId('br-'),
             item_id: itemId,
             user_id: request.user_id,
-            user_email: request.user_email,
             username: request.username,
             borrow_date: Date.now(),
             returned: false
