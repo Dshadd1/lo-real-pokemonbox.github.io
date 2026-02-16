@@ -1,4 +1,4 @@
-// script.js (完整版，方案一 + 用户名登录)
+// script.js (完整版，方案一 + 用户名登录 + 增强错误处理)
 (function() {
     const SUPABASE_URL = 'https://ktglukdrslxqirefbqvg.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt0Z2x1a2Ryc2x4cWlyZWZicXZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEwMTY0MTEsImV4cCI6MjA4NjU5MjQxMX0.PVMisfYM4BdlMcY-zV20PqP-sPoBwZg2BHGPHMjocFk';
@@ -39,7 +39,7 @@
             .from('profiles')
             .select('username')
             .eq('id', currentUser.id)
-            .maybeSingle(); // 使用 maybeSingle 避免报错
+            .maybeSingle();
         if (error) {
             console.error('获取用户名失败:', error);
             return null;
@@ -71,7 +71,7 @@
                 supabase.from('items').select('*'),
                 supabase.from('borrow_records').select('*'),
                 supabase.from('requests').select('*'),
-                supabase.from('registration_requests').select('*').eq('status', 'pending') // 只拉取待审批的
+                supabase.from('registration_requests').select('*').eq('status', 'pending')
             ]);
 
             if (itemsRes.error) throw itemsRes.error;
@@ -352,12 +352,11 @@
         if (!identifier || !password) { alert('请输入用户名/邮箱和密码'); return; }
         
         let email = identifier;
-        // 如果输入的不是邮箱（不包含@），则视为用户名，查询 profiles 表获取邮箱
         if (!identifier.includes('@')) {
             const { data, error } = await supabase
                 .from('profiles')
                 .select('email')
-                .eq('username', identifier.toLowerCase()) // 统一小写查询
+                .eq('username', identifier.toLowerCase())
                 .maybeSingle();
             if (error || !data) {
                 alert('用户名不存在');
@@ -374,11 +373,9 @@
     async function createRegistrationRequest(username, email) {
         if (!username || !email) { alert('请填写用户名和邮箱'); return; }
         
-        // 转为小写统一处理
         username = username.toLowerCase();
         email = email.toLowerCase();
         
-        // 验证格式
         if (!/^[a-zA-Z][a-zA-Z0-9_]{1,20}$/.test(username)) {
             alert('用户名需以字母开头，仅包含英文/数字/下划线(2-20位)');
             return;
@@ -390,7 +387,7 @@
         }
         
         try {
-            // 1. 检查用户名是否已在 profiles 表中存在（已注册用户）
+            // 检查用户名是否已在 profiles 表存在
             const { data: existingProfile, error: profileError } = await supabase
                 .from('profiles')
                 .select('username')
@@ -402,7 +399,6 @@
                 return;
             }
 
-            // 2. 检查邮箱是否已在 profiles 表中存在
             const { data: existingEmail, error: emailError } = await supabase
                 .from('profiles')
                 .select('email')
@@ -414,7 +410,7 @@
                 return;
             }
 
-            // 3. 检查是否有待处理的申请（同一用户名）
+            // 检查待处理的申请
             const { data: pendingReq, error: pendingError } = await supabase
                 .from('registration_requests')
                 .select('id')
@@ -427,7 +423,6 @@
                 return;
             }
 
-            // 4. 检查是否有待处理的申请（同一邮箱）
             const { data: pendingEmailReq, error: pendingEmailError } = await supabase
                 .from('registration_requests')
                 .select('id')
@@ -440,18 +435,12 @@
                 return;
             }
 
-            // 5. 提交注册申请
             const { error } = await supabase
                 .from('registration_requests')
-                .insert([{ 
-                    username, 
-                    email, 
-                    status: 'pending',
-                    created_at: new Date().toISOString()
-                }]);
+                .insert([{ username, email, status: 'pending', created_at: new Date().toISOString() }]);
                 
             if (error) {
-                if (error.code === '23505') { // 唯一约束冲突
+                if (error.code === '23505') {
                     alert('该用户名或邮箱已被申请，请换一个');
                 } else {
                     alert('提交失败：' + error.message);
@@ -589,12 +578,18 @@
         }
     }
 
-    // ---------- 注册审批函数（方案一：删除请求）----------
+    // ---------- 注册审批函数（方案一：删除请求，增强错误处理）----------
     async function approveRegistration(reqId, username, email) {
         // 固定初始密码
         const password = 'pokemmo123456';
         
-        // 二次检查：用户名或邮箱是否已被占用（可能在申请后到审批前被其他管理员处理）
+        // 二次检查：确保当前用户仍然是管理员（防止会话意外变化）
+        if (currentRole !== 'admin') {
+            alert('错误：当前用户不是管理员，审批失败');
+            return;
+        }
+
+        // 再次检查用户名或邮箱是否已被占用（可能在申请后到审批前被其他管理员处理）
         const { data: existingProfile, error: checkError } = await supabase
             .from('profiles')
             .select('id')
@@ -653,22 +648,23 @@
 
         if (profileError) {
             alert('创建用户资料失败：' + profileError.message);
-            // 注意：Auth 用户已创建，但 profiles 失败，需要手动处理或尝试删除 Auth 用户
+            // 尝试删除已创建的 Auth 用户（可选，但复杂），这里先提示手动处理
             return;
         }
 
-        // 方案一：直接删除注册请求（而不是更新状态）
+        // 方案一：直接删除注册请求
         const { error: deleteError } = await supabase
             .from('registration_requests')
             .delete()
             .eq('id', reqId);
 
         if (deleteError) {
+            alert('注册请求删除失败，但用户已创建。请手动删除该申请记录，以免影响后续注册。');
             console.error('删除注册请求失败:', deleteError);
-            // 即使删除失败，用户已创建，不影响使用
+        } else {
+            alert(`用户 ${username} 创建成功！初始密码为：${password}\n请务必告知用户此密码，并提醒其登录后修改密码。`);
         }
 
-        alert(`用户 ${username} 创建成功！初始密码为：${password}\n请务必告知用户此密码，并提醒其登录后修改密码。`);
         await renderApp();
     }
 
