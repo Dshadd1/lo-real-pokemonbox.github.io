@@ -203,7 +203,10 @@
         return `
             <div class="top-bar">
                 <div class="badge">🧑 ${currentUsername || currentUser.email} (成员)</div>
-                <button id="logoutBtn" class="logout-btn">🚪 登出</button>
+                <div>
+                    <button id="changePasswordBtn" class="btn-outline" style="margin-right: 10px;">🔒 修改密码</button>
+                    <button id="logoutBtn" class="logout-btn">🚪 登出</button>
+                </div>
             </div>
             <div class="main-panel">
                 <h2>📋 可借物品清单</h2>
@@ -213,6 +216,19 @@
                         <thead><tr><th>物品名称</th><th>详细信息</th><th>状态</th><th>操作</th></tr></thead>
                         <tbody>${tableRows || '<tr><td colspan="4" class="empty-msg">暂无物品</td></tr>'}</tbody>
                     </table>
+                </div>
+            </div>
+            <!-- 修改密码模态框 -->
+            <div id="changePasswordModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
+                <div style="background: white; padding: 30px; border-radius: 15px; width: 90%; max-width: 400px; box-shadow: 0 4px 20px rgba(0,0,0,0.15);">
+                    <h3 style="margin-top: 0; color: #333;">🔒 修改密码</h3>
+                    <input type="password" id="currentPassword" placeholder="当前密码" style="width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px;">
+                    <input type="password" id="newPassword" placeholder="新密码" style="width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px;">
+                    <input type="password" id="confirmPassword" placeholder="确认新密码" style="width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px;">
+                    <div style="display: flex; justify-content: flex-end; margin-top: 20px;">
+                        <button id="cancelChangePassword" style="padding: 10px 20px; margin-right: 10px; border: 1px solid #ddd; border-radius: 8px; background: #f5f5f5; cursor: pointer;">取消</button>
+                        <button id="submitChangePassword" style="padding: 10px 20px; border: none; border-radius: 8px; background: #4CAF50; color: white; cursor: pointer;">确认修改</button>
+                    </div>
                 </div>
             </div>
             <div class="footer-note"></div>
@@ -457,6 +473,35 @@
     function attachMainEvents() {
         document.getElementById('logoutBtn')?.addEventListener('click', async () => {
             await supabase.auth.signOut();
+        });
+
+        // 修改密码按钮事件
+        document.getElementById('changePasswordBtn')?.addEventListener('click', () => {
+            document.getElementById('changePasswordModal').style.display = 'flex';
+        });
+
+        // 取消修改密码
+        document.getElementById('cancelChangePassword')?.addEventListener('click', () => {
+            document.getElementById('changePasswordModal').style.display = 'none';
+        });
+
+        // 提交修改密码
+        document.getElementById('submitChangePassword')?.addEventListener('click', async () => {
+            const currentPassword = document.getElementById('currentPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            
+            if (newPassword !== confirmPassword) {
+                alert('两次输入的新密码不一致');
+                return;
+            }
+            
+            if (newPassword.length < 6) {
+                alert('新密码长度至少为6位');
+                return;
+            }
+            
+            await changePassword(currentPassword, newPassword);
         });
 
         // 借用请求
@@ -802,6 +847,44 @@
     async function rejectRequest(requestId) {
         await supabase.from('requests').delete().eq('id', requestId);
         await renderApp();
+    }
+
+    // 修改密码函数
+    async function changePassword(currentPassword, newPassword) {
+        try {
+            // 首先使用当前密码重新登录，验证用户身份
+            const { error: signInError } = await supabase.auth.signInWithPassword({
+                email: currentUser.email,
+                password: currentPassword
+            });
+            
+            if (signInError) {
+                alert('当前密码错误');
+                return;
+            }
+            
+            // 然后更新密码
+            const { error: updateError } = await supabase.auth.updateUser({
+                password: newPassword
+            });
+            
+            if (updateError) {
+                alert('修改密码失败：' + updateError.message);
+                return;
+            }
+            
+            alert('密码修改成功，请使用新密码登录');
+            document.getElementById('changePasswordModal').style.display = 'none';
+            // 清空密码输入框
+            document.getElementById('currentPassword').value = '';
+            document.getElementById('newPassword').value = '';
+            document.getElementById('confirmPassword').value = '';
+            // 登出用户，要求重新登录
+            await supabase.auth.signOut();
+        } catch (error) {
+            console.error('修改密码过程出错:', error);
+            alert('系统错误，请稍后重试');
+        }
     }
 
     function filterTable(tableId, searchTerm) {
