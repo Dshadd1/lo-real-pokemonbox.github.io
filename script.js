@@ -210,7 +210,7 @@
             </div>
             <div class="main-panel">
                 <h2>📋 可借物品清单</h2>
-                <input type="text" id="member-search" class="search-box" placeholder="🔍 搜索物品名称或信息..." value="${memberSearchTerm.replace(/"/g, '&quot;')}">
+                <input type="text" id="member-search" class="search-box" placeholder="🔍 搜索物品名称或信息...">
                 <div class="table-container">
                     <table id="member-items-table">
                         <thead><tr><th>物品名称</th><th>详细信息</th><th>状态</th><th>操作</th></tr></thead>
