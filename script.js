@@ -353,20 +353,39 @@
         
         let email = identifier;
         if (!identifier.includes('@')) {
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('email')
-                .eq('username', identifier.toLowerCase())
-                .maybeSingle();
-            if (error || !data) {
-                alert('用户名不存在');
+            try {
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('email')
+                    .eq('username', identifier.toLowerCase())
+                    .maybeSingle();
+                if (error) {
+                    console.error('查询用户名时出错:', error);
+                    alert('系统错误，请稍后重试');
+                    return;
+                }
+                if (!data) {
+                    alert('用户名不存在');
+                    return;
+                }
+                email = data.email;
+            } catch (err) {
+                console.error('登录过程出错:', err);
+                alert('系统错误，请稍后重试');
                 return;
             }
-            email = data.email;
         }
 
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) alert('登录失败：' + error.message);
+        try {
+            const { error } = await supabase.auth.signInWithPassword({ email, password });
+            if (error) {
+                console.error('登录失败:', error);
+                alert('登录失败：' + error.message);
+            }
+        } catch (err) {
+            console.error('登录过程出错:', err);
+            alert('系统错误，请稍后重试');
+        }
     }
 
     // 创建注册申请（统一转为小写）
