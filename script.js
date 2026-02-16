@@ -1,9 +1,9 @@
-// script.js
+// script.js (完整更新版)
 (function() {
-    // ================== 配置区（保持不变） ==================
+    // ================== 配置区 ==================
     const SUPABASE_URL = 'https://ktglukdrslxqirefbqvg.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt0Z2x1a2Ryc2x4cWlyZWZicXZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEwMTY0MTEsImV4cCI6MjA4NjU5MjQxMX0.PVMisfYM4BdlMcY-zV20PqP-sPoBwZg2BHGPHMjocFk';
-    // =======================================================
+    // ============================================
 
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -12,11 +12,11 @@
         items: [],
         borrowRecords: [],
         requests: [],
-        // 不再需要 members
     };
 
-    let currentUser = null;      // 存储完整的 user 对象
-    let currentRole = 'anon';    // 'anon', 'authenticated', 或从 user_metadata 中取出的 'admin'
+    let currentUser = null;      // 完整的 user 对象
+    let currentRole = 'anon';    // 'anon', 'authenticated', 或 'admin'
+    let currentUsername = null;  // 当前登录用户的用户名
 
     // 存储搜索词
     let memberSearchTerm = '';
@@ -33,27 +33,46 @@
         return prefix + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
     }
 
+    // 获取当前用户名的函数（从全局或从数据库获取）
+    async function fetchCurrentUsername() {
+        if (!currentUser) return null;
+        if (currentUsername) return currentUsername; // 缓存
+
+        // 从 profiles 表查询用户名
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('username')
+            .eq('id', currentUser.id)
+            .single();
+        if (error) {
+            console.error('获取用户名失败:', error);
+            return null;
+        }
+        currentUsername = data.username;
+        return currentUsername;
+    }
+
     // 监听认证状态变化
     supabase.auth.onAuthStateChange((event, session) => {
         if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
             if (session) {
                 currentUser = session.user;
                 const metadata = currentUser?.user_metadata || {};
-                // 判断角色：如果 metadata 中包含 role: admin，则是管理员
                 currentRole = metadata.role === 'admin' ? 'admin' : 'authenticated';
+                // 异步获取用户名，但此时渲染可能已经触发，因此需要在渲染前等待
+                // 我们将在 renderApp 中调用 fetchCurrentUsername 并等待
             }
         } else if (event === 'SIGNED_OUT') {
             currentUser = null;
             currentRole = 'anon';
+            currentUsername = null;
         }
-        // 重新渲染界面
         renderApp();
     });
 
     // 从云端拉取所有数据
     async function fetchAllData() {
         try {
-            // 注意：RLS 策略会基于当前用户自动过滤数据
             const [itemsRes, borrowsRes, requestsRes] = await Promise.all([
                 supabase.from('items').select('*'),
                 supabase.from('borrow_records').select('*'),
@@ -76,16 +95,19 @@
     // 渲染入口
     async function renderApp() {
         await fetchAllData();
+        if (currentUser) {
+            // 获取当前用户名
+            await fetchCurrentUsername();
+        }
+
         const appDiv = document.getElementById('app');
         
-        // 未登录或匿名
         if (!currentUser) {
             appDiv.innerHTML = renderLoginUI();
             attachLoginEvents();
             return;
         }
         
-        // 已登录，根据角色渲染不同面板
         if (currentRole === 'admin') {
             appDiv.innerHTML = renderAdminPanel();
         } else {
@@ -94,19 +116,23 @@
         attachMainEvents();
     }
 
-    // ---------- 登录界面 ----------
+    // ---------- 登录界面（增加用户名/邮箱输入）----------
     function renderLoginUI() {
         return `
             <div style="text-align: center; margin-bottom: 20px;">
                 <h1 style="font-size: 2.2rem;">📦 公会宝可梦借还</h1>
-                <p style="color: #3b6c7c;">请使用邮箱注册或登录</p>
+                <p style="color: #3b6c7c;">请使用用户名或邮箱登录，新用户请注册</p>
             </div>
             <div class="login-section">
                 <div class="login-card">
                     <h3>🔐 登录 / 注册</h3>
-                    <input type="email" id="emailInput" placeholder="邮箱(qq号@qq.com)" autocomplete="off">
-                    <input type="password" id="passwordInput" placeholder="密码(建议设置为游戏id)">
+                    <input type="text" id="loginIdentifier" placeholder="用户名 或 邮箱" autocomplete="off">
+                    <input type="password" id="passwordInput" placeholder="密码">
                     <button id="signInBtn" style="margin-bottom: 8px;">🔑 登录</button>
+                    <hr style="margin: 15px 0; border: 1px solid #d9e2e8;">
+                    <input type="text" id="regUsername" placeholder="注册用户名（唯一）" autocomplete="off">
+                    <input type="email" id="regEmail" placeholder="邮箱" autocomplete="off">
+                    <input type="password" id="regPassword" placeholder="密码">
                     <button id="signUpBtn" class="btn-outline">📝 注册新账号</button>
                     <p style="font-size:0.8rem; margin-top:12px;">注册后联系管理员设置角色</p>
                 </div>
@@ -115,7 +141,7 @@
         `;
     }
 
-    // ---------- 成员主面板（与原逻辑类似，但使用 currentUser.id 作为标识）----------
+    // ---------- 成员主面板（显示用户名）----------
     function renderMemberPanel() {
         const items = state.items;
         const borrows = state.borrowRecords.filter(b => !b.returned);
@@ -163,8 +189,8 @@
                     actionBtn = `<button class="btn-outline return-request-btn" data-itemid="${item.id}" style="width: auto; background: #f8e3cd;">↩️ 归还请求</button>`;
                 }
             } else if (isBorrowed && !borrowedByMe) {
-                const borrowerEmail = activeBorrow ? (activeBorrow.user_email || '未知') : '未知';
-                actionBtn = `<span style="color: #a06b53;">👤 ${borrowerEmail} 借出</span>`;
+                const borrowerUsername = activeBorrow ? (activeBorrow.username || '未知') : '未知';
+                actionBtn = `<span style="color: #a06b53;">👤 ${borrowerUsername} 借出</span>`;
             }
 
             tableRows += `
@@ -179,7 +205,7 @@
 
         return `
             <div class="top-bar">
-                <div class="badge">🧑 ${currentUser.email} (成员)</div>
+                <div class="badge">🧑 ${currentUsername || currentUser.email} (成员)</div>
                 <button id="logoutBtn" class="logout-btn">🚪 登出</button>
             </div>
             <div class="main-panel">
@@ -192,23 +218,22 @@
                     </table>
                 </div>
             </div>
-            <div class="footer-note">✅ 数据云端存储，实时同步</div>
+            <div class="footer-note"></div>
         `;
     }
 
-    // ---------- 管理员面板（与原逻辑类似，增加成员管理界面简化）----------
+    // ---------- 管理员面板（显示用户名）----------
     function renderAdminPanel() {
         const items = state.items;
         const borrows = state.borrowRecords.filter(b => !b.returned);
         const pendingRequests = state.requests.filter(r => r.status === 'pending');
-        // 注意：不再有 members 表，管理员无法直接添加成员，但可以通过 Auth 页面添加
 
-        // 物品表格（略，与之前相同）
+        // 物品表格
         let itemRows = '';
         items.forEach(item => {
             const activeBorrow = borrows.find(b => b.item_id === item.id);
             const statusText = activeBorrow 
-                ? `📆 借出日期: ${formatDate(activeBorrow.borrow_date)} (${activeBorrow.user_email || '未知'})` 
+                ? `📆 借出日期: ${formatDate(activeBorrow.borrow_date)} (${activeBorrow.username || activeBorrow.user_email || '未知'})` 
                 : '✅ 未借';
             itemRows += `
                 <tr>
@@ -223,7 +248,7 @@
             `;
         });
 
-        // 待审批请求（略，与之前相同）
+        // 待审批请求
         let requestItems = '';
         if (pendingRequests.length === 0) {
             requestItems = `<div class="empty-msg">✨ 暂无待处理请求</div>`;
@@ -237,7 +262,7 @@
                     : `<button class="success-btn approve-return-btn" data-requestid="${req.id}" style="width: auto;">🔄 确认归还</button>`;
                 requestItems += `
                     <div class="request-item">
-                        <div><strong>${itemName}</strong><br><span style="color: #3a6c7a;">申请人: ${req.user_email}  ·  ${reqTypeText}</span></div>
+                        <div><strong>${itemName}</strong><br><span style="color: #3a6c7a;">申请人: ${req.username || req.user_email || '未知'}  ·  ${reqTypeText}</span></div>
                         <div class="action-group">
                             ${approveBtn}
                             <button class="danger-btn reject-request-btn" data-requestid="${req.id}" style="width: auto; background: #9f7e6b;">❌ 拒绝</button>
@@ -249,7 +274,7 @@
 
         return `
             <div class="top-bar">
-                <div class="badge">🛡️ 管理员：${currentUser.email}</div>
+                <div class="badge">🛡️ 管理员：${currentUsername || currentUser.email}</div>
                 <button id="logoutBtn" class="logout-btn">🚪 登出</button>
             </div>
             <div class="main-panel">
@@ -267,10 +292,10 @@
                     </table>
                 </div>
 
-                <!-- 成员管理提示：成员通过 Auth 管理 -->
+                <!-- 成员管理提示 -->
                 <div style="margin-top: 30px; padding: 20px; background: #f0f7fa; border-radius: 20px;">
                     <h3>🧑‍🤝‍🧑 成员管理</h3>
-                    <p>请在 Supabase 控制台的 <strong>Authentication → Users</strong> 中添加或删除用户。</p>
+                    <p>请在 Supabase 控制台的 <strong>Authentication → Users</strong> 中添加或删除用户，并在 <strong>profiles</strong> 表中维护用户名。</p>
                     <p>新注册的成员默认角色为普通用户，如需设为管理员，请在控制台编辑其 User Metadata，添加 <code>{"role": "admin"}</code>。</p>
                 </div>
 
@@ -279,42 +304,85 @@
                     ${requestItems}
                 </div>
             </div>
-            <div class="footer-note">🔐 所有审批操作将立即更新云端</div>
+            <div class="footer-note"></div>
         `;
     }
 
-    // ---------- 登录事件绑定 ----------
-    function attachLoginEvents() {
-        document.getElementById('signInBtn')?.addEventListener('click', async () => {
-            const email = document.getElementById('emailInput').value;
-            const password = document.getElementById('passwordInput').value;
-            if (!email || !password) { alert('请输入邮箱和密码'); return; }
-            
-            const { error } = await supabase.auth.signInWithPassword({ email, password });
-            if (error) alert('登录失败：' + error.message);
-        });
+    // ---------- 登录/注册事件绑定 ----------
+    async function handleSignIn(identifier, password) {
+        if (!identifier || !password) { alert('请输入用户名/邮箱和密码'); return; }
+        
+        let email = identifier;
+        // 如果输入的不是邮箱（不包含@），则视为用户名，查询 profiles 表获取邮箱
+        if (!identifier.includes('@')) {
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('email')
+                .eq('username', identifier)
+                .maybeSingle();
+            if (error || !data) {
+                alert('用户名不存在');
+                return;
+            }
+            email = data.email;
+        }
 
-        document.getElementById('signUpBtn')?.addEventListener('click', async () => {
-            const email = document.getElementById('emailInput').value;
-            const password = document.getElementById('passwordInput').value;
-            if (!email || !password) { alert('请输入邮箱和密码'); return; }
-            
-            const { error } = await supabase.auth.signUp({ 
-                email, 
-                password,
-                options: {
-                    data: { role: 'authenticated' } // 默认角色
-                }
-            });
-            if (error) {
-                alert('注册失败：' + error.message);
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) alert('登录失败：' + error.message);
+    }
+
+    async function handleSignUp(username, email, password) {
+        if (!username || !email || !password) { alert('请填写完整信息'); return; }
+        // 检查用户名是否已存在
+        const { data: existing, error: checkError } = await supabase
+            .from('profiles')
+            .select('username')
+            .eq('username', username)
+            .maybeSingle();
+        if (checkError) { alert('验证失败：' + checkError.message); return; }
+        if (existing) { alert('用户名已存在'); return; }
+
+        // 注册 Auth 用户
+        const { data, error } = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+                data: { role: 'authenticated' } // 默认角色
+            }
+        });
+        if (error) { alert('注册失败：' + error.message); return; }
+
+        // 注册成功后，插入 profiles 表
+        if (data.user) {
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .insert([{ id: data.user.id, username, email }]);
+            if (profileError) {
+                console.error('创建用户资料失败:', profileError);
+                alert('注册成功但创建用户名失败，请联系管理员');
+                // 可以选择删除 Auth 用户或忽略
             } else {
                 alert('注册成功！请登录。');
             }
+        }
+    }
+
+    function attachLoginEvents() {
+        document.getElementById('signInBtn')?.addEventListener('click', () => {
+            const identifier = document.getElementById('loginIdentifier').value;
+            const password = document.getElementById('passwordInput').value;
+            handleSignIn(identifier, password);
+        });
+
+        document.getElementById('signUpBtn')?.addEventListener('click', () => {
+            const username = document.getElementById('regUsername').value.trim();
+            const email = document.getElementById('regEmail').value.trim();
+            const password = document.getElementById('regPassword').value;
+            handleSignUp(username, email, password);
         });
     }
 
-    // ---------- 主界面事件绑定（修改为使用 currentUser.id）----------
+    // ---------- 主界面事件绑定（修改为使用 currentUser.id 和 currentUsername）----------
     function attachMainEvents() {
         // 登出
         document.getElementById('logoutBtn')?.addEventListener('click', async () => {
@@ -402,7 +470,7 @@
             });
         });
 
-        // 搜索框（略，与之前相同）
+        // 搜索框
         const memberSearch = document.getElementById('member-search');
         if (memberSearch) {
             memberSearch.value = memberSearchTerm;
@@ -423,7 +491,7 @@
         }
     }
 
-    // ---------- 云端操作函数（需适配 user_id）----------
+    // ---------- 云端操作函数（适配 username）----------
     async function addItem(name, info) {
         const newItem = { id: generateId('itm-'), name, info };
         const { error } = await supabase.from('items').insert([newItem]);
@@ -467,6 +535,7 @@
             item_id: itemId,
             user_id: currentUser.id,
             user_email: currentUser.email,
+            username: currentUsername, // 存储用户名
             type: 'borrow',
             status: 'pending',
             request_date: Date.now()
@@ -487,6 +556,7 @@
             item_id: itemId,
             user_id: currentUser.id,
             user_email: currentUser.email,
+            username: currentUsername,
             type: 'return',
             status: 'pending',
             request_date: Date.now()
@@ -519,6 +589,7 @@
             item_id: itemId,
             user_id: request.user_id,
             user_email: request.user_email,
+            username: request.username, // 复制用户名
             borrow_date: Date.now(),
             returned: false
         };
